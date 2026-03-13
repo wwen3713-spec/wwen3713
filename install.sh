@@ -1450,7 +1450,7 @@ if [ "$ALT_HOST" != "$HOST" ]; then
   # use friendly region name for fragment (fallback to code if not known)
   friendly_region="$(get_region_name "$REGION")"
   # add "-alt" suffix when building alt fragments to indicate the short URL
-  friendly_region_alt="${friendly_region}-alt"
+  friendly_region_alt="${friendly_region}-SkyNode"
 
  if [ "$PROTO" = "vless" ]; then
     # remove all host parameters then add one correct host
