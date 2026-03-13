@@ -1,10 +1,12 @@
+
 # ========== Multi-region deployment (parallel) ==========
+# يجب وضع الدالة بعد المتغيرات والدوال المساعدة وقبل منطق الإعدادات السريعة
 deploy_all_verified_regions() {
   local preset="$1"
   local available_regions=""
-  local -A region_services
-  local -A region_status
-  local -A region_links
+  declare -A region_services
+  declare -A region_status
+  declare -A region_links
   local pids=()
   if command -v gcloud >/dev/null 2>&1; then
     available_regions=$(gcloud run regions list --format="value(name)" 2>/dev/null || true)
@@ -17,7 +19,8 @@ deploy_all_verified_regions() {
     echo "🔄 Deploying in region: $region"
     (
       if gcloud run deploy "$SERVICE" --region "$REGION" --source "." --platform managed --allow-unauthenticated --quiet; then
-        HOST="$SERVICE-$(gcloud projects describe $(gcloud config get-value project 2>/dev/null) --format=\"value(projectNumber)\" 2>/dev/null).$REGION.run.app"
+        PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project 2>/dev/null) --format="value(projectNumber)" 2>/dev/null)
+        HOST="$SERVICE-$PROJECT_NUMBER.$REGION.run.app"
         region_status[$region]="success"
         region_links[$region]="https://$HOST"
         echo "✅ Success: $region"
