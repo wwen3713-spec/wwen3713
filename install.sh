@@ -372,6 +372,52 @@ case "$PRESET_CHOICE" in
     print_success "Custom configuration mode"
     ;;
 esac
+
+# -------- Multi-region deployment --------
+deploy_all_verified_regions() {
+  local preset="$1"
+  local available_regions=""
+  local -A region_services
+  local -A region_status
+  local -A region_links
+  local pids=()
+  if command -v gcloud >/dev/null 2>&1; then
+    available_regions=$(gcloud run regions list --format="value(name)" 2>/dev/null || true)
+  fi
+  for region in ${available_regions}; do
+    SERVICE="$(generate_random_service_name)"
+    REGION="$region"
+    region_services[$region]="$SERVICE"
+    apply_preset "$preset"
+    echo "🔄 Deploying in region: $region"
+    (
+      if gcloud run deploy "$SERVICE" --region "$REGION" --source "." --platform managed --allow-unauthenticated --quiet; then
+        HOST="$SERVICE-$(gcloud projects describe $(gcloud config get-value project 2>/dev/null) --format=\"value(projectNumber)\" 2>/dev/null).$REGION.run.app"
+        region_status[$region]="success"
+        region_links[$region]="https://$HOST"
+        echo "✅ Success: $region"
+      else
+        region_status[$region]="fail"
+        echo "❌ Failed: $region, deleting service..."
+        gcloud run services delete "$SERVICE" --region="$REGION" --quiet 2>/dev/null || true
+      fi
+    ) &
+    pids+=("$!")
+  done
+  # Wait for all background jobs
+  for pid in "${pids[@]}"; do
+    wait "$pid"
+  done
+  # Send successful links to Telegram bot
+  if [ -n "${BOT_TOKEN}" ] && [ -n "${CHAT_ID}" ]; then
+    for region in ${available_regions}; do
+      if [ "${region_status[$region]}" = "success" ]; then
+        send_telegram "<b>🔗 REGION:</b> <pre>${region_links[$region]}</pre>"
+      fi
+    done
+    print_success "Multi-region links sent to Telegram (parallel)"
+  fi
+}
 # -------- Telegram Bot --------
 
 # -------- Multi-region deployment --------
