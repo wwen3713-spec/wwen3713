@@ -1454,14 +1454,14 @@ if [ "$ALT_HOST" != "$HOST" ]; then
 
   if [ "$PROTO" = "vless" ]; then
     # Replace host in query params with ALT_HOST and remove any duplicate host parameter
-    ALT_VLESS_QUERY=$(echo "$QUERY_PARAMS" | sed "s/&host=${HOST}/&host=${ALT_HOST}/g" | sed 's/\(.*\)&host=[^&]*&host=[^&]*\(.*\)/\1&host=${ALT_HOST}\2/')
+    ALT_VLESS_QUERY=$(echo "$QUERY_PARAMS" | sed "s/&host=${HOST}/g" | sed 's/\(.*\)&host=[^&]*&host=[^&]*\(.*\)/\1&host=${ALT_HOST}\2/')
     ALT_LINK="vless://${UUID}@${ALT_HOST}:443?${ALT_VLESS_QUERY}#(${friendly_region_alt})"
   elif [ "$PROTO" = "vmess" ]; then
     ALT_VMESS_JSON=$(echo "$VMESS_JSON" | sed "s|\"add\": \"$HOST\"|\"add\": \"$ALT_HOST\"|")
     ALT_LINK="vmess://$(echo "$ALT_VMESS_JSON" | base64 -w 0)"
   elif [ "$PROTO" = "trojan" ]; then
     # Replace host in query params with ALT_HOST and remove any duplicate host parameter
-    ALT_TROJAN_QUERY=$(echo "$QUERY_PARAMS" | sed "s/&host=${HOST}/&host=${ALT_HOST}/g" | sed 's/\(.*\)&host=[^&]*&host=[^&]*\(.*\)/\1&host=${ALT_HOST}\2/')
+    ALT_TROJAN_QUERY=$(echo "$QUERY_PARAMS" | sed "s/&host=${HOST}/g" | sed 's/\(.*\)&host=[^&]*&host=[^&]*\(.*\)/\1&host=${ALT_HOST}\2/')
     ALT_LINK="trojan://${UUID}@${ALT_HOST}:443?${ALT_TROJAN_QUERY}#(${friendly_region_alt})"
   fi
   
