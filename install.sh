@@ -333,41 +333,220 @@ show_more_regions() {
 }
 
 deploy_service() {
+  # -------- Protocol Selection --------
+  if [ "$PRESET_MODE" = "custom" ]; then
+    print_section "Protocol Selection"
+    echo ""
+    echo -e "  ${BOLD}${BRIGHT_CYAN}1${NC} ${BRIGHT_CYAN}VLESS${NC}       ${DIM}Fast, modern, lightweight${NC}"
+    echo -e "  ${BOLD}${BRIGHT_YELLOW}2${NC} ${BRIGHT_YELLOW}VMESS${NC}       ${DIM}Compatible, widely supported${NC}"
+    echo -e "  ${BOLD}${BRIGHT_RED}3${NC} ${BRIGHT_RED}TROJAN${NC}      ${DIM}Camouflages as HTTPS server${NC}"
+    echo ""
+    PROTO_CHOICE=""
+    while [ -z "${PROTO_CHOICE:-}" ]; do
+      read -rp "$(echo -e "${BOLD}${BRIGHT_BLUE}Select protocol${NC} (required): ")" PROTO_CHOICE
+    done
+    case "$PROTO_CHOICE" in
+      1)
+        PROTO="vless"
+        print_success "VLESS protocol selected"
+        ;;
+      2)
+        PROTO="vmess"
+        print_success "VMESS protocol selected"
+        ;;
+      3)
+        PROTO="trojan"
+        print_success "TROJAN protocol selected"
+        ;;
+      *)
+        print_error "Invalid protocol selection"
+        return 1
+        ;;
+    esac
+  else
+    PROTO="${PRESET_PROTO:-vless}"
+    print_success "Using preset protocol: $PROTO"
+  fi
+
+  # -------- Network Type --------
+  # Cloud Run supports WebSocket (ws) reliably; gRPC has compatibility issues
+  NETWORK="ws"
+  NETWORK_DISPLAY="WebSocket"
+
+  # -------- WebSocket Path --------
+  if [ "$PRESET_MODE" = "custom" ]; then
+    while [ -z "${WSPATH:-}" ]; do
+      read -rp "$(echo -e "${BOLD}📡 WebSocket Path${NC} (required): ")" WSPATH
+    done
+  else
+    if [ "${INTERACTIVE}" = true ] && [ -z "${WSPATH:-}" ]; then
+      # Use preset path if available, otherwise ask
+      if [ -z "${PRESET_WSPATH:-}" ]; then
+        read -rp "$(echo -e "${BOLD}📡 WebSocket Path${NC} (default: /ws): ")" WSPATH
+      else
+        WSPATH="${PRESET_WSPATH}"
+        print_info "WebSocket Path (from preset): $WSPATH"
+      fi
+    fi
+    WSPATH="${WSPATH:-${PRESET_WSPATH:-/ws}}"
+  fi
+
+  # -------- Service Name --------
+  if [ "$PRESET_MODE" = "custom" ]; then
+    while [ -z "${SERVICE:-}" ]; do
+      read -rp "$(echo -e "${BOLD}🪪 Cloud Run Service Name${NC} (required): ")" SERVICE
+    done
+  else
+    if [ "${INTERACTIVE}" = true ] && [ -z "${SERVICE:-}" ]; then
+      # Use preset service if available, otherwise ask
+      if [ -z "${PRESET_SERVICE:-}" ]; then
+        read -rp "$(echo -e "${BOLD}🪪 Cloud Run Service Name${NC} (default: xray-ws): ")" SERVICE
+      else
+        SERVICE="${PRESET_SERVICE}"
+        print_info "Service Name (from preset): $SERVICE"
+      fi
+    fi
+    SERVICE="${SERVICE:-${PRESET_SERVICE:-xray-ws}}"
+  fi
+
+  # -------- Advanced Settings --------
+  if [ "$PRESET_MODE" = "custom" ]; then
+    print_section "Advanced Settings"
+    echo ""
+    echo -e "  ${BOLD}1${NC} yt3.ggpht.com    (YouTube CDN - Recommended)"
+    echo -e "  ${BOLD}2${NC} www.google.com   (Google CDN)"
+    echo -e "  ${BOLD}3${NC} www.yt3.ggpht.com  (YouTube Direct)"
+    echo -e "  ${BOLD}4${NC} ${GRAY}(Leave blank)${NC}     No SNI"
+    echo ""
+    SNI_CHOICE=""
+    while [ -z "${SNI_CHOICE:-}" ]; do
+      read -rp "$(echo -e "${BOLD}Select SNI [1-4]${NC} (required): ")" SNI_CHOICE
+    done
+    case "$SNI_CHOICE" in
+      1)
+        SNI="yt3.ggpht.com"
+        print_success "SNI: $SNI"
+        ;;
+      2)
+        SNI="www.google.com"
+        print_success "SNI: $SNI"
+        ;;
+      3)
+        SNI="m.youtube.com"
+        print_success "SNI: $SNI"
+        ;;
+      4)
+        SNI=""
+        print_info "No SNI selected"
+        ;;
+      *)
+        SNI="$SNI_CHOICE"
+        print_success "Custom SNI: $SNI"
+        ;;
+    esac
+
+    echo ""
+    echo -e "  ${BOLD}1${NC} default          (h2, http/1.1)"
+    echo -e "  ${BOLD}2${NC} h2,http/1.1      (HTTP/2 Priority)"
+    echo -e "  ${BOLD}3${NC} h2               (HTTP/2 Only)"
+    echo -e "  ${BOLD}4${NC} http/1.1         (HTTP/1.1 Only)"
+    echo ""
+    ALPN_CHOICE=""
+    while [ -z "${ALPN_CHOICE:-}" ]; do
+      read -rp "$(echo -e "${BOLD}Select ALPN [1-4]${NC} (required): ")" ALPN_CHOICE
+    done
+    case "$ALPN_CHOICE" in
+      1)
+        ALPN="default"
+        print_success "ALPN: $ALPN"
+        ;;
+      2)
+        ALPN="h2,http/1.1"
+        print_success "ALPN: $ALPN"
+        ;;
+      3)
+        ALPN="h2"
+        print_success "ALPN: $ALPN"
+        ;;
+      4)
+        ALPN="http/1.1"
+        print_success "ALPN: $ALPN"
+        ;;
+      *)
+        ALPN="$ALPN_CHOICE"
+        print_success "Custom ALPN: $ALPN"
+        ;;
+    esac
+  else
+    SNI="${PRESET_SNI}"
+    ALPN="${PRESET_ALPN}"
+  fi
+
   # -------- Performance Settings --------
   print_section "Performance Configuration"
 
   if [ "$PRESET_MODE" = "custom" ]; then
-    echo -e "${GRAY}(Optional - press Enter to skip each field)${NC}"
+    echo -e "${GRAY}(All fields are required)${NC}"
   else
     echo -e "${GRAY}Preset: ${BOLD}$PRESET_MODE${GRAY} (press Enter to keep)${NC}"
   fi
 
   echo ""
 
-  if [ "${INTERACTIVE}" = true ] && [ -z "${MEMORY:-}" ]; then
-    read -rp "$(echo -e "${BOLD}💾 Memory (MB)${NC} [512/1024/2048]: ")" MEMORY
+  if [ "$PRESET_MODE" = "custom" ]; then
+    while [ -z "${MEMORY:-}" ]; do
+      read -rp "$(echo -e "${BOLD}💾 Memory (MB)${NC} (required): ")" MEMORY
+    done
+  else
+    if [ "${INTERACTIVE}" = true ] && [ -z "${MEMORY:-}" ]; then
+      read -rp "$(echo -e "${BOLD}💾 Memory (MB)${NC} [512/1024/2048]: ")" MEMORY
+    fi
+    MEMORY="${MEMORY:-}"
   fi
-  MEMORY="${MEMORY:-}"
 
-  if [ "${INTERACTIVE}" = true ] && [ -z "${CPU:-}" ]; then
-    read -rp "$(echo -e "${BOLD}⚙️  CPU cores${NC} [0.5/1/2]: ")" CPU
+  if [ "$PRESET_MODE" = "custom" ]; then
+    while [ -z "${CPU:-}" ]; do
+      read -rp "$(echo -e "${BOLD}⚙️  CPU cores${NC} (required): ")" CPU
+    done
+  else
+    if [ "${INTERACTIVE}" = true ] && [ -z "${CPU:-}" ]; then
+      read -rp "$(echo -e "${BOLD}⚙️  CPU cores${NC} [0.5/1/2]: ")" CPU
+    fi
+    CPU="${CPU:-}"
   fi
-  CPU="${CPU:-}"
 
-  if [ "${INTERACTIVE}" = true ] && [ -z "${TIMEOUT:-}" ]; then
-    read -rp "$(echo -e "${BOLD}⏱️  Timeout (seconds)${NC} [300/1800/3600]: ")" TIMEOUT
+  if [ "$PRESET_MODE" = "custom" ]; then
+    while [ -z "${TIMEOUT:-}" ]; do
+      read -rp "$(echo -e "${BOLD}⏱️  Timeout (seconds)${NC} (required): ")" TIMEOUT
+    done
+  else
+    if [ "${INTERACTIVE}" = true ] && [ -z "${TIMEOUT:-}" ]; then
+      read -rp "$(echo -e "${BOLD}⏱️  Timeout (seconds)${NC} [300/1800/3600]: ")" TIMEOUT
+    fi
+    TIMEOUT="${TIMEOUT:-}"
   fi
-  TIMEOUT="${TIMEOUT:-}"
 
-  if [ "${INTERACTIVE}" = true ] && [ -z "${MAX_INSTANCES:-}" ]; then
-    read -rp "$(echo -e "${BOLD}📊 Max instances${NC} [5/10/20/50]: ")" MAX_INSTANCES
+  if [ "$PRESET_MODE" = "custom" ]; then
+    while [ -z "${MAX_INSTANCES:-}" ]; do
+      read -rp "$(echo -e "${BOLD}📊 Max instances${NC} (required): ")" MAX_INSTANCES
+    done
+  else
+    if [ "${INTERACTIVE}" = true ] && [ -z "${MAX_INSTANCES:-}" ]; then
+      read -rp "$(echo -e "${BOLD}📊 Max instances${NC} [5/10/20/50]: ")" MAX_INSTANCES
+    fi
+    MAX_INSTANCES="${MAX_INSTANCES:-}"
   fi
-  MAX_INSTANCES="${MAX_INSTANCES:-}"
 
-  if [ "${INTERACTIVE}" = true ] && [ -z "${CONCURRENCY:-}" ]; then
-    read -rp "$(echo -e "${BOLD}🔗 Max concurrent requests${NC} [100/500/1000]: ")" CONCURRENCY
+  if [ "$PRESET_MODE" = "custom" ]; then
+    while [ -z "${CONCURRENCY:-}" ]; do
+      read -rp "$(echo -e "${BOLD}🔗 Max concurrent requests${NC} (required): ")" CONCURRENCY
+    done
+  else
+    if [ "${INTERACTIVE}" = true ] && [ -z "${CONCURRENCY:-}" ]; then
+      read -rp "$(echo -e "${BOLD}🔗 Max concurrent requests${NC} [100/500/1000]: ")" CONCURRENCY
+    fi
+    CONCURRENCY="${CONCURRENCY:-}"
   fi
-  CONCURRENCY="${CONCURRENCY:-}"
 
   # Speed Limit: قيمة ثابتة (لا تؤثر حالياً على السرعة الفعلية)
   SPEED_LIMIT="${SPEED_LIMIT:-0}"
