@@ -332,6 +332,420 @@ show_more_regions() {
   done
 }
 
+deploy_service() {
+  # -------- Performance Settings --------
+  print_section "Performance Configuration"
+
+  if [ "$PRESET_MODE" = "custom" ]; then
+    echo -e "${GRAY}(Optional - press Enter to skip each field)${NC}"
+  else
+    echo -e "${GRAY}Preset: ${BOLD}$PRESET_MODE${GRAY} (press Enter to keep)${NC}"
+  fi
+
+  echo ""
+
+  if [ "${INTERACTIVE}" = true ] && [ -z "${MEMORY:-}" ]; then
+    read -rp "$(echo -e "${BOLD}💾 Memory (MB)${NC} [512/1024/2048]: ")" MEMORY
+  fi
+  MEMORY="${MEMORY:-}"
+
+  if [ "${INTERACTIVE}" = true ] && [ -z "${CPU:-}" ]; then
+    read -rp "$(echo -e "${BOLD}⚙️  CPU cores${NC} [0.5/1/2]: ")" CPU
+  fi
+  CPU="${CPU:-}"
+
+  if [ "${INTERACTIVE}" = true ] && [ -z "${TIMEOUT:-}" ]; then
+    read -rp "$(echo -e "${BOLD}⏱️  Timeout (seconds)${NC} [300/1800/3600]: ")" TIMEOUT
+  fi
+  TIMEOUT="${TIMEOUT:-}"
+
+  if [ "${INTERACTIVE}" = true ] && [ -z "${MAX_INSTANCES:-}" ]; then
+    read -rp "$(echo -e "${BOLD}📊 Max instances${NC} [5/10/20/50]: ")" MAX_INSTANCES
+  fi
+  MAX_INSTANCES="${MAX_INSTANCES:-}"
+
+  if [ "${INTERACTIVE}" = true ] && [ -z "${CONCURRENCY:-}" ]; then
+    read -rp "$(echo -e "${BOLD}🔗 Max concurrent requests${NC} [100/500/1000]: ")" CONCURRENCY
+  fi
+  CONCURRENCY="${CONCURRENCY:-}"
+
+  # Speed Limit: قيمة ثابتة (لا تؤثر حالياً على السرعة الفعلية)
+  SPEED_LIMIT="${SPEED_LIMIT:-0}"
+
+  # Show what was selected
+  echo ""
+  print_section "Configuration Summary"
+  echo ""
+  [ -n "${MEMORY}" ] && print_success "Memory: ${BOLD}${MEMORY}${NC} MB" || print_info "Memory: (Cloud Run default)"
+  [ -n "${CPU}" ] && print_success "CPU: ${BOLD}${CPU}${NC} cores" || print_info "CPU: (Cloud Run default)"
+  [ -n "${TIMEOUT}" ] && print_success "Timeout: ${BOLD}${TIMEOUT}${NC}s" || print_info "Timeout: (Cloud Run default)"
+  [ -n "${MAX_INSTANCES}" ] && print_success "Max instances: ${BOLD}${MAX_INSTANCES}${NC}" || print_info "Max instances: (Cloud Run default)"
+  [ -n "${CONCURRENCY}" ] && print_success "Max concurrency: ${BOLD}${CONCURRENCY}${NC}" || print_info "Max concurrency: (Cloud Run default)"
+
+  # -------- Sanity checks --------
+  print_section "Validation"
+
+  if ! command -v gcloud >/dev/null 2>&1; then
+    print_error "gcloud CLI not found. Install and authenticate first."
+    return 1
+  fi
+  print_success "gcloud CLI found"
+
+  PROJECT=$(gcloud config get-value project 2>/dev/null || true)
+  if [ -z "${PROJECT:-}" ]; then
+    print_error "No GCP project set. Run 'gcloud init' or 'gcloud config set project PROJECT_ID'."
+    return 1
+  fi
+  print_success "GCP Project: $PROJECT"
+  print_success "All required APIs are enabled"
+
+  # -------- Deploying XRAY to Cloud Run --------
+  print_section "Deploying XRAY to Cloud Run"
+  echo ""
+
+  # Get PROJECT_NUMBER early (needed for HOST env var)
+  PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project 2>/dev/null) --format="value(projectNumber)" 2>/dev/null)
+
+  # Build deploy command with optional parameters
+  DEPLOY_ARGS=(
+    "--source" "."
+    "--region" "$REGION"
+    "--platform" "managed"
+    "--allow-unauthenticated"
+  )
+
+  [ -n "${MEMORY}" ] && DEPLOY_ARGS+=("--memory" "${MEMORY}Mi")
+  [ -n "${CPU}" ] && DEPLOY_ARGS+=("--cpu" "${CPU}")
+  [ -n "${TIMEOUT}" ] && DEPLOY_ARGS+=("--timeout" "${TIMEOUT}")
+  [ -n "${MAX_INSTANCES}" ] && DEPLOY_ARGS+=("--max-instances" "${MAX_INSTANCES}")
+  [ -n "${CONCURRENCY}" ] && DEPLOY_ARGS+=("--concurrency" "${CONCURRENCY}")
+
+  # Speed limit is now configured interactively or via environment variable
+
+  # Use Cloud Run service URL as WebSocket host header
+  # Format: service-projectnumber.region.run.app
+  DEPLOY_ARGS+=("--set-env-vars" "PROTO=${PROTO},USER_ID=${UUID},WS_PATH=${WSPATH},NETWORK=${NETWORK},SPEED_LIMIT=${SPEED_LIMIT},HOST=${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app")
+  DEPLOY_ARGS+=("--quiet")
+
+  # -------- Get URL --------
+  gcloud run deploy "$SERVICE" "${DEPLOY_ARGS[@]}"
+
+  # -------- Get URL and Host --------
+
+  # Use custom hostname if provided, otherwise use Cloud Run default
+  if [ -n "${CUSTOM_HOST}" ]; then
+    HOST="${CUSTOM_HOST}"
+    echo "Service URL: https://${HOST}"
+    echo "✅ Using custom hostname: ${HOST}"
+  else
+    HOST="${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app"
+    echo "Service URL: https://${HOST}"
+    echo "✅ Using Cloud Run default: ${HOST}"
+  fi
+
+  # -------- Get URL and Host --------
+
+  # Use custom hostname if provided, otherwise use Cloud Run default
+  if [ -n "${CUSTOM_HOST}" ]; then
+    HOST="${CUSTOM_HOST}"
+    echo "Service URL: https://${HOST}"
+    print_success "Using custom hostname: ${HOST}"
+  else
+    HOST="${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app"
+    echo ""
+    print_success "Service deployed successfully!"
+    echo "Service URL: ${BOLD}https://${HOST}${NC}"
+  fi
+
+  # -------- Output --------
+  echo ""
+  echo -e "${BRIGHT_GREEN}${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+  echo -e "${BRIGHT_GREEN}${BOLD}║${NC}                                                              ${BRIGHT_GREEN}${BOLD}║${NC}"
+  echo -e "${BRIGHT_GREEN}${BOLD}║${NC}              ✅ ${BRIGHT_WHITE}${BOLD}DEPLOYMENT SUCCESS${NC}               ${BRIGHT_GREEN}${BOLD}║${NC}"
+  echo -e "${BRIGHT_GREEN}${BOLD}║${NC}                                                              ${BRIGHT_GREEN}${BOLD}║${NC}"
+  echo -e "${BRIGHT_GREEN}${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
+  echo ""
+
+  echo -e "  ${BRIGHT_MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "  ${BOLD}${BRIGHT_CYAN}Protocol${NC}:       ${BRIGHT_GREEN}${PROTO^^}${NC}"
+  echo -e "  ${BOLD}${BRIGHT_CYAN}Address${NC}:       ${BRIGHT_CYAN}${HOST}${NC}"
+  echo -e "  ${BOLD}${BRIGHT_CYAN}Port${NC}:          ${BRIGHT_YELLOW}443${NC} ${DIM}(HTTPS)${NC}"
+  echo -e "  ${BOLD}${BRIGHT_CYAN}UUID/PWD${NC}:      ${BRIGHT_MAGENTA}${UUID}${NC}"
+
+  if [ "$NETWORK" = "ws" ]; then
+    echo -e "  ${BOLD}${BRIGHT_CYAN}Path${NC}:          ${BRIGHT_BLUE}${WSPATH}${NC}"
+  elif [ "$NETWORK" = "grpc" ]; then
+    echo -e "  ${BOLD}${BRIGHT_CYAN}Service${NC}:       ${BRIGHT_BLUE}${WSPATH}${NC}"
+  fi
+
+  echo -e "  ${BOLD}${BRIGHT_CYAN}Network${NC}:       ${BRIGHT_CYAN}${NETWORK_DISPLAY}${NC}"
+  echo -e "  ${BOLD}${BRIGHT_CYAN}Security${NC}:      ${BRIGHT_GREEN}TLS${NC} ${DIM}(Enabled)${NC}"
+
+  if [[ "${SPEED_LIMIT}" =~ ^[0-9]+$ ]]; then
+    MBPS=$(awk "BEGIN{printf \"%.2f\", (${SPEED_LIMIT}*8)/1000}")
+    echo -e "  ${BOLD}${BRIGHT_CYAN}Speed Limit${NC}:   ${BRIGHT_YELLOW}${SPEED_LIMIT} KB/s${NC} ${DIM}(~${MBPS} Mbps)${NC}"
+  else
+    echo -e "  ${BOLD}${BRIGHT_CYAN}Speed Limit${NC}:   ${BRIGHT_YELLOW}${SPEED_LIMIT}${NC}"
+  fi
+
+  if [ -n "${MEMORY}${CPU}${TIMEOUT}${MAX_INSTANCES}${CONCURRENCY}" ]; then
+    echo ""
+    echo -e "  ${BRIGHT_MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${BOLD}${BRIGHT_BLUE}⚙️  Configuration Applied${NC}:"
+    [ -n "${MEMORY}" ] && echo -e "      ${DIM}├─${NC} Memory:        ${BRIGHT_GREEN}${MEMORY}${NC} MB"
+    [ -n "${CPU}" ] && echo -e "      ${DIM}├─${NC} CPU:           ${BRIGHT_GREEN}${CPU}${NC} cores"
+    [ -n "${TIMEOUT}" ] && echo -e "      ${DIM}├─${NC} Timeout:       ${BRIGHT_GREEN}${TIMEOUT}${NC}s"
+    [ -n "${MAX_INSTANCES}" ] && echo -e "      ${DIM}├─${NC} Max Instances: ${BRIGHT_GREEN}${MAX_INSTANCES}${NC}"
+    [ -n "${CONCURRENCY}" ] && echo -e "      ${DIM}└─${NC} Concurrency:   ${BRIGHT_GREEN}${CONCURRENCY}${NC} req/instance"
+  fi
+
+  echo ""
+  echo -e "${BRIGHT_CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+  echo -e "${BRIGHT_CYAN}${BOLD}║${NC}                                                              ${BRIGHT_CYAN}${BOLD}║${NC}"
+  echo -e "${BRIGHT_CYAN}${BOLD}║${NC}              📎 ${BRIGHT_WHITE}${BOLD}SHARED LINKS${NC}                    ${BRIGHT_CYAN}${BOLD}║${NC}"
+  echo -e "${BRIGHT_CYAN}${BOLD}║${NC}                                                              ${BRIGHT_CYAN}${BOLD}║${NC}"
+  echo -e "${BRIGHT_CYAN}${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
+
+  # -------- Build Query Parameters --------
+  # Build query parameters for WebSocket (only supported on Cloud Run)
+  QUERY_PARAMS="type=ws&security=tls&path=${WSPATH}"
+  if [ -n "${SNI}" ]; then
+    QUERY_PARAMS="${QUERY_PARAMS}&sni=${SNI}"
+  fi
+  if [ -n "${ALPN}" ]; then
+    QUERY_PARAMS="${QUERY_PARAMS}&alpn=${ALPN}"
+  fi
+  # Add host parameter for WebSocket compatibility
+  QUERY_PARAMS="${QUERY_PARAMS}&host=${HOST}"
+
+  # Build fragment with custom ID
+  LINK_FRAGMENT="xray"
+  if [ -n "${CUSTOM_ID}" ]; then
+    LINK_FRAGMENT="(${CUSTOM_ID})"
+  fi
+
+  # -------- Generate Protocol Links --------
+  if [ "$PROTO" = "vless" ]; then
+    VLESS_QUERY="${QUERY_PARAMS}"
+    VLESS_LINK="vless://${UUID}@${HOST}:443?${VLESS_QUERY}#${LINK_FRAGMENT}"
+    echo ""
+    echo -e "${BRIGHT_CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${BRIGHT_CYAN}${BOLD}VLESS Link:${NC}"
+    echo -e "${BRIGHT_GREEN}${DIM}$VLESS_LINK${NC}"
+    echo -e "${BRIGHT_CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    SHARE_LINK="$VLESS_LINK"
+  elif [ "$PROTO" = "vmess" ]; then
+    VMESS_JSON=$(cat <<EOF
+{
+  "v": "2",
+  "ps": "$SERVICE",
+  "add": "$HOST",
+  "port": "443",
+  "id": "$UUID",
+  "aid": "0",
+  "net": "$NETWORK",
+  "type": "none",
+  "host": "$HOST",
+  "path": "$WSPATH",
+  "tls": "tls"
+}
+EOF
+)
+    if [ -n "${SNI}" ]; then
+      VMESS_JSON=$(echo "$VMESS_JSON" | sed "s/}/,\"sni\":\"${SNI}\"}/")
+    fi
+    if [ -n "${ALPN}" ]; then
+      VMESS_JSON=$(echo "$VMESS_JSON" | sed "s/}/,\"alpn\":\"${ALPN}\"}/")
+    fi
+    VMESS_LINK="vmess://$(echo "$VMESS_JSON" | base64 -w 0)"
+    echo ""
+    echo -e "${BRIGHT_MAGENTA}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${BRIGHT_MAGENTA}${BOLD}VMESS Link:${NC}"
+    echo -e "${BRIGHT_MAGENTA}${DIM}$VMESS_LINK${NC}"
+    echo -e "${BRIGHT_MAGENTA}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    SHARE_LINK="$VMESS_LINK"
+  elif [ "$PROTO" = "trojan" ]; then
+    TROJAN_LINK="trojan://${UUID}@${HOST}:443?${QUERY_PARAMS}#${LINK_FRAGMENT}"
+    echo ""
+    echo -e "${BRIGHT_RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${BRIGHT_RED}${BOLD}TROJAN Link:${NC}"
+    echo -e "${BRIGHT_RED}${DIM}$TROJAN_LINK${NC}"
+    echo -e "${BRIGHT_RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    SHARE_LINK="$TROJAN_LINK"
+  fi
+
+  # -------- Generate Alternative URL (short URL) --------
+  # Try to get the short URL from gcloud (if available)
+  ALT_HOST=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.url)" 2>/dev/null | sed 's|https://||' | sed 's|/||g' || echo "")
+
+  if [ -z "$ALT_HOST" ]; then
+    ALT_HOST="$HOST"  # fallback to primary if short URL not available
+  fi
+
+  # Generate alternative link with short URL only if different from primary
+  if [ "$ALT_HOST" != "$HOST" ]; then
+    # use friendly region name for fragment (fallback to code if not known)
+    friendly_region="$(get_region_name "$REGION")"
+    # add "-alt" suffix when building alt fragments to indicate the short URL
+    friendly_region_alt="${friendly_region}-SkyNode"
+
+   if [ "$PROTO" = "vless" ]; then
+      # remove all host parameters then add one correct host
+      ALT_VLESS_QUERY=$(echo "$QUERY_PARAMS" | sed 's/&host=[^&]*//g')
+      ALT_VLESS_QUERY="${ALT_VLESS_QUERY}&host=${HOST}"
+      ALT_LINK="vless://${UUID}@${ALT_HOST}:443?${ALT_VLESS_QUERY}#(${friendly_region_alt})"
+
+    elif [ "$PROTO" = "vmess" ]; then
+      ALT_VMESS_JSON=$(echo "$VMESS_JSON" | sed "s|\"add\": \"$HOST\"|\"add\": \"$ALT_HOST\"|")
+      ALT_LINK="vmess://$(echo "$ALT_VMESS_JSON" | base64 -w 0)"
+
+    elif [ "$PROTO" = "trojan" ]; then
+      ALT_TROJAN_QUERY=$(echo "$QUERY_PARAMS" | sed 's/&host=[^&]*//g')
+      ALT_TROJAN_QUERY="${ALT_TROJAN_QUERY}&host=${HOST}"
+      ALT_LINK="trojan://${UUID}@${ALT_HOST}:443?${ALT_TROJAN_QUERY}#(${friendly_region_alt})"
+    fi
+    
+    echo ""
+    echo -e "${BOLD}${WHITE}Alternative Link (Short URL):${NC}"
+    echo "$ALT_LINK"
+  else
+    ALT_LINK="$SHARE_LINK"
+  fi
+
+  echo ""
+  echo -e "${CYAN}${BOLD}╚════════════════════════════════════════════════╝${NC}"
+
+  # -------- Generate Data URIs --------
+  echo ""
+  print_section "Data URIs (JSON/Text)"
+  echo ""
+
+  # Prepare path/service info
+  PATH_INFO=""
+  if [ "$NETWORK" = "ws" ]; then
+    PATH_INFO="Path: ${WSPATH}"
+  elif [ "$NETWORK" = "grpc" ]; then
+    PATH_INFO="Service: ${WSPATH}"
+  fi
+
+  # Prepare optional params info
+  OPTIONAL_INFO=""
+  if [ -n "${SNI}" ]; then
+    OPTIONAL_INFO="${OPTIONAL_INFO}SNI: ${SNI}\n"
+  fi
+  if [ -n "${ALPN}" ] && [ "${ALPN}" != "h2,http/1.1" ]; then
+    OPTIONAL_INFO="${OPTIONAL_INFO}ALPN: ${ALPN}\n"
+  fi
+  if [ -n "${CUSTOM_ID}" ]; then
+    OPTIONAL_INFO="${OPTIONAL_INFO}Custom ID: ${CUSTOM_ID}\n"
+  fi
+
+  # Data URI 1: Plain text configuration
+  CONFIG_TEXT="✅ XRAY DEPLOYMENT SUCCESS
+
+Protocol: ${PROTO^^}
+Host: ${HOST}
+Port: 443
+UUID/Password: ${UUID}
+${PATH_INFO}
+Network: ${NETWORK_DISPLAY} + TLS
+${OPTIONAL_INFO}Share Link: ${SHARE_LINK}"
+
+  DATA_URI_TEXT="data:text/plain;base64,$(echo -n "$CONFIG_TEXT" | base64 -w 0)"
+  echo -e "${BOLD}Text Format:${NC}"
+  echo "$DATA_URI_TEXT"
+  echo ""
+
+  # Data URI 2: JSON configuration
+  if [ "$NETWORK" = "ws" ]; then
+    CONFIG_JSON=$(cat <<EOF
+{
+  "protocol": "${PROTO}",
+  "host": "${HOST}",
+  "port": 443,
+  "uuid_password": "${UUID}",
+  "path": "${WSPATH}",
+  "network": "${NETWORK}",
+  "network_display": "${NETWORK_DISPLAY}",
+  "tls": true,
+  "sni": "${SNI}",
+  "alpn": "${ALPN}",
+  "custom_id": "${CUSTOM_ID}",
+  "share_link": "${SHARE_LINK}"
+}
+EOF
+)
+  elif [ "$NETWORK" = "grpc" ]; then
+    CONFIG_JSON=$(cat <<EOF
+{
+  "protocol": "${PROTO}",
+  "host": "${HOST}",
+  "port": 443,
+  "uuid_password": "${UUID}",
+  "service_name": "${WSPATH}",
+  "network": "${NETWORK}",
+  "network_display": "${NETWORK_DISPLAY}",
+  "tls": true,
+  "sni": "${SNI}",
+  "alpn": "${ALPN}",
+  "custom_id": "${CUSTOM_ID}",
+  "share_link": "${SHARE_LINK}"
+}
+EOF
+)
+  else
+    CONFIG_JSON=$(cat <<EOF
+{
+  "protocol": "${PROTO}",
+  "host": "${HOST}",
+  "port": 443,
+  "uuid_password": "${UUID}",
+  "network": "${NETWORK}",
+  "network_display": "${NETWORK_DISPLAY}",
+  "tls": true,
+  "sni": "${SNI}",
+  "alpn": "${ALPN}",
+  "custom_id": "${CUSTOM_ID}",
+  "share_link": "${SHARE_LINK}"
+}
+EOF
+)
+  fi
+
+  DATA_URI_JSON="data:application/json;base64,$(echo -n "$CONFIG_JSON" | base64 -w 0)"
+  echo -e "${BOLD}JSON Format:${NC}"
+  echo "$DATA_URI_JSON"
+
+  echo "$DATA_URI_JSON"
+  echo ""
+
+  # -------- Send to Telegram --------
+  if [ -n "${BOT_TOKEN}" ] && [ -n "${CHAT_ID}" ]; then
+    print_section "Sending to Telegram"
+    # Send primary link (primary URL in HOST)
+    #send_telegram "<b>🔗 PRIMARY (HOST):</b><pre>${SHARE_LINK}</pre>" 
+    send_telegram "<b>🔗 PRIMARY (HOST):</b><pre>${ALT_LINK}</pre>"
+    print_success "Configuration sent to Telegram"
+  fi
+
+  echo ""
+  echo -e "${BRIGHT_GREEN}${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+  echo -e "${BRIGHT_GREEN}${BOLD}║${NC}                                                              ${BRIGHT_GREEN}${BOLD}║${NC}"
+  echo -e "${BRIGHT_GREEN}${BOLD}║${NC}    ✓ ${BRIGHT_WHITE}${BOLD}Installation Completed Successfully${NC}             ${BRIGHT_GREEN}${BOLD}║${NC}"
+  echo -e "${BRIGHT_GREEN}${BOLD}║${NC}                                                              ${BRIGHT_GREEN}${BOLD}║${NC}"
+  echo -e "${BRIGHT_GREEN}${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
+  echo ""
+  echo -e "${BRIGHT_YELLOW}${BOLD}📌 Next Steps:${NC}"
+  echo -e "  ${BRIGHT_CYAN}1.${NC} Copy the link above (VLESS, VMESS, or TROJAN)"
+  echo -e "  ${BRIGHT_CYAN}2.${NC} Open your VPN client application"
+  echo -e "  ${BRIGHT_CYAN}3.${NC} Scan the QR code or paste the link"
+  echo -e "  ${BRIGHT_CYAN}4.${NC} Select and connect to the server"
+  echo ""
+  echo -e "${DIM}For more information, visit your VPN client's documentation.${NC}"
+}
+
+while true; do
+
 # -------- Preset Selection --------
 if [ "${INTERACTIVE}" = true ] && [ -z "${PRESET:-}" ]; then
   print_section "Quick Start with Presets"
@@ -1068,6 +1482,24 @@ sleep 1
 # -------- Region Select --------
 print_section "Select Cloud Run Region"
 
+if [[ "$PRESET_MODE" =~ ^(trojan-ws|vless-ws|vmess-ws)$ ]]; then
+  if [ ${#FILTERED_SUGGESTED[@]} -eq 1 ]; then
+    REGION="${FILTERED_SUGGESTED[0]}"
+    CUSTOM_ID="$REGION"
+    print_success "Auto-selected region: $REGION"
+    deploy_service
+    continue
+  elif [ ${#FILTERED_SUGGESTED[@]} -eq 2 ]; then
+    for region in "${FILTERED_SUGGESTED[@]}"; do
+      REGION="$region"
+      CUSTOM_ID="$REGION"
+      print_success "Deploying for region: $REGION"
+      deploy_service
+    done
+    continue
+  fi
+fi
+
 if [ "${INTERACTIVE}" = true ] && [ -z "${REGION:-}" ]; then
   SELECTED_REGION=""
   while [ -z "${SELECTED_REGION}" ]; do
@@ -1603,4 +2035,6 @@ echo -e "  ${BRIGHT_CYAN}3.${NC} Scan the QR code or paste the link"
 echo -e "  ${BRIGHT_CYAN}4.${NC} Select and connect to the server"
 echo ""
 echo -e "${DIM}For more information, visit your VPN client's documentation.${NC}"
+
+done
 echo ""
