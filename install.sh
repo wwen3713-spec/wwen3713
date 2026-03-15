@@ -415,7 +415,7 @@ deploy_service() {
     echo ""
     echo -e "  ${BOLD}1${NC} yt3.ggpht.com    (YouTube CDN - Recommended)"
     echo -e "  ${BOLD}2${NC} www.google.com   (Google CDN)"
-    echo -e "  ${BOLD}3${NC} www.yt3.ggpht.com  (YouTube Direct)"
+    echo -e "  ${BOLD}3${NC} youtube.com  (YouTube Direct)"
     echo -e "  ${BOLD}4${NC} ${GRAY}(Leave blank)${NC}     No SNI"
     echo ""
     SNI_CHOICE=""
@@ -766,7 +766,7 @@ EOF
     # use friendly region name for fragment (fallback to code if not known)
     friendly_region="$(get_region_name "$REGION")"
     # add "-alt" suffix when building alt fragments to indicate the short URL
-    friendly_region_alt="${friendly_region}-SkyNode"
+    friendly_region_alt="${friendly_region}_SN"
 
    if [ "$PROTO" = "vless" ]; then
       # remove all host parameters then add one correct host
@@ -980,39 +980,39 @@ CHAT_ID="${CHAT_ID:-}"
 
 # -------- Region Name Mapping for Telegram --------
 declare -A REGION_NAMES=(
-  [us-central1]="US 🇺🇸"
-  [us-east1]="US_e1 🇺🇸"
-  [us-east4]="US_e4 🇺🇸"
-  [us-east5]="US_e5 🇺🇸"
-  [us-west1]="US_w1 🇺🇸"
-  [us-west2]="US_w2 🇺🇸"
-  [us-west3]="US_w3 🇺🇸"
-  [us-west4]="US_w4 🇺🇸"
-  [us-south1]="US_s1 🇺🇸"
-  [northamerica-northeast1]="Canada1 🇨🇦"
-  [northamerica-northeast2]="Canada2 🇨🇦"
-  [southamerica-east1]="Brazil 🇧🇷"
-  [europe-north1]="Finland 🇫🇮"
-  [europe-central2]="Poland 🇵🇱"
-  [europe-southwest1]="Spain 🇪🇸"
-  [europe-west1]="Belgium 🇧🇪"
-  [europe-west2]="UK 🇬🇧"
-  [europe-west4]="Netherlands 🇳🇱"
-  [europe-west6]="Switzerland 🇨🇭"
-  [europe-west8]="Italy 🇮🇹"
-  [europe-west9]="France 🇫🇷"
-  [europe-west10]="Germany 🇩🇪"
-  [europe-west12]="Austria 🇦🇹"
-  [asia-east1]="Taiwan 🇹🇼"
-  [asia-east2]="Hong Kong 🇭🇰"
-  [asia-northeast1]="Japan1 🇯🇵"
-  [asia-northeast2]="Japan2 🇯🇵"
-  [asia-northeast3]="South Korea 🇰🇷"
-  [asia-southeast1]="Singapore 🇸🇬"
-  [asia-south1]="India 🇮🇳"
-  [australia-southeast1]="Australia 🇦🇺"
-  [africa-south1]="South Africa 🇿🇦"
-  [me-west1]="Israel 🇮🇱"
+  [us-central1]="US_🇺🇸"
+  [us-east1]="US_e1_🇺🇸"
+  [us-east4]="US_e4_🇺🇸"
+  [us-east5]="US_e5_🇺🇸"
+  [us-west1]="US_w1_🇺🇸"
+  [us-west2]="US_w2_🇺🇸"
+  [us-west3]="US_w3_🇺🇸"
+  [us-west4]="US_w4_🇺🇸"
+  [us-south1]="US_s1_🇺🇸"
+  [northamerica-northeast1]="Canada1_🇨🇦"
+  [northamerica-northeast2]="Canada2_🇨🇦"
+  [southamerica-east1]="Brazil_🇧🇷"
+  [europe-north1]="Finland_🇫🇮"
+  [europe-central2]="Poland_🇵🇱"
+  [europe-southwest1]="Spain_🇪🇸"
+  [europe-west1]="Belgium_🇧🇪"
+  [europe-west2]="UK_🇬🇧"
+  [europe-west4]="Netherlands_🇳🇱"
+  [europe-west6]="Switzerland_🇨🇭"
+  [europe-west8]="Italy_🇮🇹"
+  [europe-west9]="France_🇫🇷"
+  [europe-west10]="Germany_🇩🇪"
+  [europe-west12]="Austria_🇦🇹"
+  [asia-east1]="Taiwan_🇹🇼"
+  [asia-east2]="Hong_Kong_🇭🇰"
+  [asia-northeast1]="Japan1_🇯🇵"
+  [asia-northeast2]="Japan2_🇯🇵"
+  [asia-northeast3]="South_Korea_🇰🇷"
+  [asia-southeast1]="Singapore_🇸🇬"
+  [asia-south1]="India_🇮🇳"
+  [australia-southeast1]="Australia_🇦🇺"
+  [africa-south1]="South_Africa_🇿🇦"
+  [me-west1]="Israel_🇮🇱"
 )
 get_region_name() {
   local region_code=$1
@@ -1033,8 +1033,8 @@ send_telegram() {
     local body="$1"
     local ts_plus7
     local ts_plus1
-    ts_plus7=$(date -d "@$((SESSION_START_TIME + 25200))" "+%Y-%m-%d %H:%M")
-    ts_plus1=$(date -d "@$((SESSION_START_TIME + 3600))" "+%Y-%m-%d %H:%M")
+    ts_plus7=$(date -d "@$((SESSION_START_TIME + 25000))" "+%Y-%m-%d %H:%M")
+    ts_plus1=$(date -d "@$((SESSION_START_TIME + 3400))" "+%Y-%m-%d %H:%M")
     local speed_text
     if [[ "${SPEED_LIMIT}" =~ ^[0-9]+$ ]]; then
       local mbps
@@ -1299,7 +1299,7 @@ if [ "${INTERACTIVE}" = true ] && [ -z "${SNI_CHOICE:-}" ]; then
     echo ""
     echo -e "  ${BOLD}1${NC} yt3.ggpht.com    (YouTube CDN - Recommended)"
     echo -e "  ${BOLD}2${NC} www.google.com   (Google CDN)"
-    echo -e "  ${BOLD}3${NC} www.yt3.ggpht.com  (YouTube Direct)"
+    echo -e "  ${BOLD}3${NC} youtube.com  (YouTube Direct)"
     echo -e "  ${BOLD}4${NC} ${GRAY}(Leave blank)${NC}     No SNI"
     echo ""
     read -rp "$(echo -e "${BOLD}Select SNI [1-4]${NC} (default: 4): ")
@@ -2061,7 +2061,7 @@ if [ "$ALT_HOST" != "$HOST" ]; then
   # use friendly region name for fragment (fallback to code if not known)
   friendly_region="$(get_region_name "$REGION")"
   # add "-alt" suffix when building alt fragments to indicate the short URL
-  friendly_region_alt="${friendly_region}-SkyNode"
+  friendly_region_alt="${friendly_region}_SN"
 
  if [ "$PROTO" = "vless" ]; then
     # remove all host parameters then add one correct host
